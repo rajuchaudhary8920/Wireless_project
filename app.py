@@ -22,7 +22,7 @@ if 'bins' not in st.session_state:
 # --- MQTT Setup (Runs in background) ---
 def on_connect(client, userdata, flags, rc):
     client.subscribe(MQTT_TOPIC)
-
+s
 def on_message(client, userdata, msg):
     try:
         # Expecting JSON like: {"bin_id": "BIN_003", "location": "Library", "fill_percentage": 88.5}
@@ -58,10 +58,6 @@ start_mqtt()
 st.title("♻️ Smart City Waste Dispatch Center")
 st.markdown("Real-time IoT telemetry monitoring for municipal waste management.")
 
-# Auto-refresh the Streamlit UI every 2 seconds to show live data
-st.markdown("""
-    <meta http-equiv="refresh" content="2">
-""", unsafe_allow_html=True)
 
 # Convert our dictionary to a Pandas DataFrame for easy display
 df = pd.DataFrame.from_dict(st.session_state.bins, orient='index').reset_index()
@@ -89,3 +85,7 @@ st.dataframe(df.style.map(highlight_critical, subset=['Action Required']), use_c
 # Visual Bar Chart
 st.subheader("Fill Levels Overview")
 st.bar_chart(data=df, x='Bin ID', y='Fill Level (%)')
+
+# Smoothly rerun the dashboard every 2 seconds to fetch new MQTT data
+time.sleep(2)
+st.rerun()
