@@ -22,7 +22,7 @@ if 'bins' not in st.session_state:
 # --- MQTT Setup (Runs in background) ---
 def on_connect(client, userdata, flags, rc):
     client.subscribe(MQTT_TOPIC)
-s
+
 def on_message(client, userdata, msg):
     try:
         # Expecting JSON like: {"bin_id": "BIN_003", "location": "Library", "fill_percentage": 88.5}
