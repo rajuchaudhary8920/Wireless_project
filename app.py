@@ -3,103 +3,130 @@ import paho.mqtt.client as mqtt
 import json
 import threading
 import time
+import pandas as pd
 
-# --- Configuration ---
-st.set_page_config(page_title="City Waste Dispatch", page_icon="♻️", layout="wide")
+# --- UI Configuration ---
+st.set_page_config(page_title="CityNet Operations", page_icon="🌐", layout="wide")
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
-# MATCH THE UNIQUE TOPIC HERE
-MQTT_TOPIC = "raju_btech_2026/smartcity/waste/#"
+MQTT_TOPIC = "raju_btech_2026/smartcity/waste/#" # Must match ESP32
 
-# --- Thread-Safe Data Storage ---
-# We use cache_resource so the background thread and Streamlit UI share the exact same memory
+# Custom CSS for a professional dark mode look
+st.markdown("""
+    <style>
+    .metric-card { background-color: #1E1E1E; padding: 20px; border-radius: 10px; border-left: 5px solid #4CAF50; margin-bottom: 15px;}
+    .critical-card { border-left: 5px solid #FF4B4B;}
+    .wet-badge { background-color: #8B4513; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;}
+    .dry-badge { background-color: #2196F3; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;}
+    .mixed-badge { background-color: #9E9E9E; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;}
+    </style>
+""", unsafe_allow_html=True)
+
+# --- Thread-Safe Data Store ---
 @st.cache_resource
-def get_data_store():
+def get_fleet_data():
     return {
-        "BIN_001": {"location": "North Campus", "fill_percentage": 25.0, "status": "✅ Normal", "last_updated": "--:--:--"},
-        "BIN_002": {"location": "South Campus", "fill_percentage": 10.0, "status": "✅ Normal", "last_updated": "--:--:--"}
+        "NODE_000_SIM": {"location": "Server Init", "fill": 0.0, "weight": 0.0, "class": "Standby", "time": "--:--"}
     }
 
-data_store = get_data_store()
+fleet_data = get_fleet_data()
 
-# --- MQTT Setup (Background Thread) ---
+# --- MQTT Background Thread ---
 def on_connect(client, userdata, flags, rc):
     client.subscribe(MQTT_TOPIC)
 
 def on_message(client, userdata, msg):
     try:
-        payload = json.loads(msg.payload.decode('utf-8'))
-        bin_id = payload.get("bin_id")
-        
-        if bin_id:
-            fill = float(payload.get("fill_percentage", 0))
-            status = "🚨 DISPATCH TRUCK" if fill >= 85.0 else "✅ Normal"
-            
-            # Update the shared data store
-            data_store[bin_id] = {
-                "location": payload.get("location", "Unknown"),
-                "fill_percentage": fill,
-                "status": status,
-                "last_updated": time.strftime("%H:%M:%S")
+        data = json.loads(msg.payload.decode('utf-8'))
+        n_id = data.get("node_id")
+        if n_id:
+            fleet_data[n_id] = {
+                "location": data.get("location", "Unknown"),
+                "fill": float(data.get("fill_percentage", 0)),
+                "weight": float(data.get("weight_kg", 0)),
+                "class": data.get("classification", "Unknown"),
+                "time": time.strftime("%H:%M:%S")
             }
-    except Exception as e:
-        pass 
+    except:
+        pass
 
 @st.cache_resource
-def start_mqtt():
+def init_mqtt():
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    thread = threading.Thread(target=client.loop_forever, daemon=True)
-    thread.start()
+    threading.Thread(target=client.loop_forever, daemon=True).start()
     return client
 
-start_mqtt()
+init_mqtt()
 
-# --- Professional UI ---
-st.title("♻️ Municipal Waste Dispatch Dashboard")
-st.markdown("Live IoT Telemetry & Routing Center")
+# --- Dashboard Layout ---
+st.title("🌐 Smart City Edge Intelligence")
+st.markdown("**Automated Waste Density Classification & Routing System**")
 
-# Top Metrics
-total_bins = len(data_store)
-critical_bins = sum(1 for b in data_store.values() if "DISPATCH" in b["status"])
+# Analytics Row
+nodes_online = len([k for k in fleet_data.keys() if "SIM" not in k])
+critical_nodes = sum(1 for d in fleet_data.values() if d['fill'] >= 85)
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Active Sensor Nodes", total_bins)
-col2.metric("Critical Bins (Action Required)", critical_bins, delta=critical_bins if critical_bins > 0 else None, delta_color="inverse")
-col3.metric("Network Status", "Online 🟢")
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.info(f"📡 **Active Edge Nodes:** {nodes_online}")
+with c2:
+    st.error(f"🚨 **Critical Bins (>85%):** {critical_nodes}")
+with c3:
+    st.success(f"⚡ **Network Protocol:** MQTT / WSN")
 
 st.divider()
+st.subheader("Real-Time Fleet Telemetry")
 
-# --- Dynamic Sensor Cards ---
-st.subheader("Live Fleet Status")
-
-# Create a grid layout
+# Generate Dynamic UI Cards
 cols = st.columns(3)
-col_idx = 0
+idx = 0
 
-for bin_id, details in data_store.items():
-    with cols[col_idx % 3]:
-        # Create a visual card for each bin
-        with st.container(border=True):
-            st.markdown(f"### {bin_id}")
-            st.caption(f"📍 {details['location']}")
-            
-            # Progress bar visualization
-            fill_pct = int(details['fill_percentage'])
-            st.progress(fill_pct / 100.0, text=f"Capacity: {fill_pct}%")
-            
-            # Status and timestamp
-            if "DISPATCH" in details['status']:
-                st.error(details['status'])
-            else:
-                st.success(details['status'])
-                
-            st.caption(f"Last ping: {details['last_updated']}")
-            
-    col_idx += 1
+for node_id, metrics in fleet_data.items():
+    if "SIM" in node_id and nodes_online > 0:
+        continue # Hide simulator data once real data arrives
+        
+    with cols[idx % 3]:
+        # Determine styling based on state
+        is_critical = metrics['fill'] >= 85
+        card_class = "metric-card critical-card" if is_critical else "metric-card"
+        
+        badge_html = f"<span class='mixed-badge'>{metrics['class']}</span>"
+        if "DRY" in metrics['class']:
+            badge_html = f"<span class='dry-badge'>{metrics['class']}</span>"
+        elif "WET" in metrics['class']:
+            badge_html = f"<span class='wet-badge'>{metrics['class']}</span>"
 
-# Silent UI refresh every 3 seconds
-time.sleep(3)
+        # Action Logic
+        action = "✅ Route Optimal"
+        if is_critical:
+            action = "🚛 DISPATCH: Compost/Organic Truck" if "WET" in metrics['class'] else "🚛 DISPATCH: Recycling Truck"
+
+        # Render the HTML card
+        st.markdown(f"""
+        <div class="{card_class}">
+            <h4>{node_id}</h4>
+            <p style="color: gray; margin-top:-10px;">📍 {metrics['location']} | ⏱️ {metrics['time']}</p>
+            {badge_html}
+            <div style="margin-top: 15px;">
+                <strong>Volume Level:</strong> {int(metrics['fill'])}%
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Native Streamlit Progress Bar
+        st.progress(int(metrics['fill']) / 100.0)
+        
+        # Bottom details
+        st.markdown(f"""
+            <strong>Current Mass:</strong> {metrics['weight']:.1f} kg <br>
+            <strong>System Action:</strong> <span style="color: {'#FF4B4B' if is_critical else '#4CAF50'}">{action}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    idx += 1
+
+# Silent Polling Loop
+time.sleep(2)
 st.rerun()
